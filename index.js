@@ -49,16 +49,22 @@ bot.on('message', (msg) => {
         return;
     }
 
-    // Detectar si el mensaje empieza con pcA: o pcB:
+    // Regex mejorada: ignora mayúsculas/minúsculas y espacios extra
     const regex = /^(pcA|pcB):\s*(.+)/i;
-    const match = msg.text.match(regex);
+    const match = msg.text.trim().match(regex);
 
     if (match) {
-        const pcTarget = match[1].toLowerCase();
-        const content = match[2];
+        const pcTarget = match[1].toLowerCase(); // pcA o pcB
+        const content = match[2].trim();
         
-        servers[pcTarget].pendingTasks.push(content);
-        bot.sendMessage(myChatId, `?? Tarea en cola para ${pcTarget.toUpperCase()}. Se guardará en tu PC en su próximo pulso.`);
+        // Verificamos que el objeto exista antes de pushear
+        if (servers[pcTarget]) {
+            servers[pcTarget].pendingTasks.push(content);
+            console.log(`?? Tarea guardada para ${pcTarget}: ${content}`);
+            bot.sendMessage(myChatId, `? Tarea en cola para ${pcTarget.toUpperCase()}.`);
+        }
+    } else {
+        console.log(`Mensaje no reconocido como tarea: ${msg.text}`);
     }
 });
 
