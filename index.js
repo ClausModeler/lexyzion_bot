@@ -44,33 +44,25 @@ bot.on('message', (msg) => {
     const chatIdRecibido = msg.chat.id.toString();
     const texto = msg.text;
 
-    console.log(`--- Nuevo Mensaje ---`);
-    console.log(`ID: ${chatIdRecibido} | Esperado: ${myChatId}`);
-    console.log(`Texto: "${texto}"`);
+    if (chatIdRecibido !== myChatId || !texto) return;
 
-    // 1. Verificación de ID (Asegúrate que coincidan en los logs)
-    if (chatIdRecibido !== myChatId) {
-        console.log("Bloqueado: El Chat ID no coincide con la variable de entorno.");
-        return;
-    }
+    console.log(`--- Procesando: "${texto}" ---`);
 
-    if (!texto) return;
-
-    // 2. Regex mejorada (Soporta minúsculas, mayúsculas y espacios variados)
-    const regex = /^(pcA|pcB):\s*(.+)/i;
-    const match = texto.match(regex);
+    // Regex para detectar /pcA o /pcB seguido de la tarea
+    const commandRegex = /^\/(pcA|pcB)\s+(.+)/i;
+    const match = texto.match(commandRegex);
 
     if (match) {
-        const pcTarget = match[1].toLowerCase(); // Convierte PCA a pcA
+        const pcTarget = match[1].toLowerCase(); // pcA o pcB
         const contenido = match[2].trim();
         
         if (servers[pcTarget]) {
             servers[pcTarget].pendingTasks.push(contenido);
-            console.log(`? ÉXITO: Tarea guardada para ${pcTarget}: ${contenido}`);
-            bot.sendMessage(myChatId, `? Tarea anotada para ${pcTarget.toUpperCase()}.`);
+            console.log(`? Tarea guardada en ${pcTarget}: ${contenido}`);
+            bot.sendMessage(myChatId, `? Tarea en cola para ${pcTarget.toUpperCase()}`);
         }
-    } else {
-        console.log("Aviso: El formato no es 'pcA: mensaje' o es un comando.");
+    } else if (texto.startsWith('/')) {
+        console.log("Comando no reconocido o sin mensaje.");
     }
 });
 
