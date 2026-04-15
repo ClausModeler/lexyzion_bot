@@ -41,7 +41,13 @@ app.get('/heartbeat', (req, res) => {
 
 // Manejar mensajes de texto para guardar tareas
 bot.on('message', (msg) => {
-    if (msg.chat.id.toString() !== myChatId || !msg.text) return;
+    // ESTO TE AYUDARÁ A VER SI LLEGAN MENSAJES
+    console.log(`Mensaje recibido de: ${msg.chat.id}. Texto: ${msg.text}`);
+    
+    if (msg.chat.id.toString() !== myChatId || !msg.text) {
+        console.log("Mensaje ignorado: ID no coincide o no hay texto.");
+        return;
+    }
 
     // Detectar si el mensaje empieza con pcA: o pcB:
     const regex = /^(pcA|pcB):\s*(.+)/i;
