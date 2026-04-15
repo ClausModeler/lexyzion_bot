@@ -41,30 +41,36 @@ app.get('/heartbeat', (req, res) => {
 
 // Manejar mensajes de texto para guardar tareas
 bot.on('message', (msg) => {
-    // ESTO TE AYUDARÁ A VER SI LLEGAN MENSAJES
-    console.log(`Mensaje recibido de: ${msg.chat.id}. Texto: ${msg.text}`);
-    
-    if (msg.chat.id.toString() !== myChatId || !msg.text) {
-        console.log("Mensaje ignorado: ID no coincide o no hay texto.");
+    const chatIdRecibido = msg.chat.id.toString();
+    const texto = msg.text;
+
+    console.log(`--- Nuevo Mensaje ---`);
+    console.log(`ID: ${chatIdRecibido} | Esperado: ${myChatId}`);
+    console.log(`Texto: "${texto}"`);
+
+    // 1. Verificación de ID (Asegúrate que coincidan en los logs)
+    if (chatIdRecibido !== myChatId) {
+        console.log("Bloqueado: El Chat ID no coincide con la variable de entorno.");
         return;
     }
 
-    // Regex mejorada: ignora mayúsculas/minúsculas y espacios extra
+    if (!texto) return;
+
+    // 2. Regex mejorada (Soporta minúsculas, mayúsculas y espacios variados)
     const regex = /^(pcA|pcB):\s*(.+)/i;
-    const match = msg.text.trim().match(regex);
+    const match = texto.match(regex);
 
     if (match) {
-        const pcTarget = match[1].toLowerCase(); // pcA o pcB
-        const content = match[2].trim();
+        const pcTarget = match[1].toLowerCase(); // Convierte PCA a pcA
+        const contenido = match[2].trim();
         
-        // Verificamos que el objeto exista antes de pushear
         if (servers[pcTarget]) {
-            servers[pcTarget].pendingTasks.push(content);
-            console.log(`?? Tarea guardada para ${pcTarget}: ${content}`);
-            bot.sendMessage(myChatId, `? Tarea en cola para ${pcTarget.toUpperCase()}.`);
+            servers[pcTarget].pendingTasks.push(contenido);
+            console.log(`? ÉXITO: Tarea guardada para ${pcTarget}: ${contenido}`);
+            bot.sendMessage(myChatId, `? Tarea anotada para ${pcTarget.toUpperCase()}.`);
         }
     } else {
-        console.log(`Mensaje no reconocido como tarea: ${msg.text}`);
+        console.log("Aviso: El formato no es 'pcA: mensaje' o es un comando.");
     }
 });
 
