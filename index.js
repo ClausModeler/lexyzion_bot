@@ -1,70 +1,92 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
+const fs = require('fs');
 const app = express();
 
 // --- CONFIGURACIÓN ---
-// Estas variables las configurarás en el panel de Railway (Variables)
 const token = process.env.TELEGRAM_TOKEN;
 const myChatId = process.env.MY_CHAT_ID;
 
-// Inicializar Bot
 const bot = new TelegramBot(token, { polling: true });
 
-// Variable para guardar el último momento en que la PC avisó que estaba encendida
-let lastSeen = null;
-let alertSent = false;
+// Estados independientes para cada PC
+let servers = {
+    pcA: { lastSeen: null, alertSent: false },
+    pcB: { lastSeen: null, alertSent: false }
+};
 
-// --- RUTAS HTTP (Para recibir el Heartbeat de tu PC) ---
+// --- RUTAS HTTP ---
 
 app.get('/', (req, res) => {
     res.send('Monitor de Servidor Operacional');
 });
 
 app.get('/heartbeat', (req, res) => {
-    lastSeen = new Date();
-    alertSent = false; // Resetear alerta si la PC vuelve a conectar
-    console.log("Ping recibido de la PC local: " + lastSeen.toLocaleString());
-    res.status(200).send('OK');
-});
+    const pc = req.query.id; // Espera ?id=pcA o ?id=pcB
 
-// --- COMANDOS DE TELEGRAM ---
-
-bot.onText(/\/status/, (msg) => {
-    // Seguridad: Solo responderte a ti
-    if (msg.chat.id.toString() !== myChatId) return;
-
-    if (!lastSeen) {
-        bot.sendMessage(myChatId, "? No hay registros de la PC. ¿Está el script de la PC corriendo?");
+    if (servers[pc]) {
+        servers[pc].lastSeen = new Date();
+        servers[pc].alertSent = false;
+        console.log(`Ping recibido de ${pc}: ${servers[pc].lastSeen.toLocaleString()}`);
+        res.status(200).send(`OK ${pc}`);
     } else {
-        const ahora = new Date();
-        const diffMs = ahora - lastSeen;
-        const diffMin = Math.floor(diffMs / 60000);
-        
-        if (diffMin < 8) {
-            bot.sendMessage(myChatId, "? PC ONLINE\nÚltimo pulso: Hace " + diffMin + " min.");
-        } else {
-            bot.sendMessage(myChatId, "?? PC OFFLINE\nSin señal desde hace " + diffMin + " min.");
-        }
+        res.status(400).send('ID de PC no reconocido');
     }
 });
 
-// --- SISTEMA DE ALERTA PROACTIVA ---
-// Revisa cada 5 minutos si la PC se desconectó
-setInterval(function() {
-    if (lastSeen && !alertSent) {
-        const ahora = new Date();
-        const diffMin = (ahora - lastSeen) / 60000;
+// --- LÓGICA DE TELEGRAM ---
 
-        if (diffMin > 12) { // Si pasan más de 12 min sin señal
-            bot.sendMessage(myChatId, "?? ¡ALERTA! Tu PC/Servidor parece estar APAGADO.\nÚltima conexión: " + lastSeen.toLocaleString());
-            alertSent = true; // No repetir la alerta hasta que vuelva a encender
+bot.on('message', (msg) => {
+    if (msg.chat.id.toString() !== myChatId || !msg.text) return;
+
+    // Guardar texto: "pcA: mensaje" o "pcB: mensaje"
+    const regex = /^(pcA|pcB):\s*(.+)/i;
+    const match = msg.text.match(regex);
+
+    if (match) {
+        const pcTarget = match[1].toLowerCase();
+        const content = match[2];
+        const fileName = `${pcTarget}_logs.txt`;
+        const logEntry = `[${new Date().toLocaleString()}] ${content}\n`;
+
+        fs.appendFile(fileName, logEntry, (err) => {
+            if (err) {
+                bot.sendMessage(myChatId, `? Error al guardar en ${fileName}`);
+            } else {
+                bot.sendMessage(myChatId, `? Guardado en registro de ${pcTarget.toUpperCase()}`);
+            }
+        });
+    }
+});
+
+bot.onText(/\/status/, (msg) => {
+    if (msg.chat.id.toString() !== myChatId) return;
+
+    let respuesta = "?? **Estado de Servidores:**\n\n";
+    for (const [name, data] of Object.entries(servers)) {
+        if (!data.lastSeen) {
+            respuesta += `? **${name.toUpperCase()}**: Sin registros.\n`;
+        } else {
+            const diffMin = Math.floor((new Date() - data.lastSeen) / 60000);
+            const status = diffMin < 10 ? "?? ONLINE" : "?? OFFLINE";
+            respuesta += `${status} **${name.toUpperCase()}**: hace ${diffMin} min.\n`;
+        }
+    }
+    bot.sendMessage(myChatId, respuesta, { parse_mode: 'Markdown' });
+});
+
+// --- MONITOR DE CAÍDAS (Cada 5 min) ---
+setInterval(() => {
+    for (const [name, data] of Object.entries(servers)) {
+        if (data.lastSeen && !data.alertSent) {
+            const diffMin = (new Date() - data.lastSeen) / 60000;
+            if (diffMin > 12) {
+                bot.sendMessage(myChatId, `?? **ALERTA**: La **${name.toUpperCase()}** se ha desconectado.\nÚltima señal: ${data.lastSeen.toLocaleString()}`, { parse_mode: 'Markdown' });
+                data.alertSent = true;
+            }
         }
     }
 }, 5 * 60 * 1000);
 
-// --- INICIO DEL SERVIDOR ---
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log("Servidor escuchando en puerto " + PORT);
-    console.log("Esperando pings en /heartbeat");
-});
+app.listen(PORT, () => console.log(`Servidor activo en puerto ${PORT}`));
