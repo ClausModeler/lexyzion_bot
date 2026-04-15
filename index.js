@@ -42,27 +42,30 @@ app.get('/heartbeat', (req, res) => {
 // Manejar mensajes de texto para guardar tareas
 bot.on('message', (msg) => {
     const chatIdRecibido = msg.chat.id.toString();
-    const texto = msg.text;
+    const texto = msg.text ? msg.text.trim() : "";
 
     if (chatIdRecibido !== myChatId || !texto) return;
 
     console.log(`--- Procesando: "${texto}" ---`);
 
-    // Regex para detectar /pcA o /pcB seguido de la tarea
-    const commandRegex = /^\/(pcA|pcB)\s+(.+)/i;
-    const match = texto.match(commandRegex);
+    // MÉTODO DIRECTO: ¿El mensaje empieza con pcA o pcB?
+    let pcTarget = null;
+    let contenido = "";
 
-    if (match) {
-        const pcTarget = match[1].toLowerCase(); // pcA o pcB
-        const contenido = match[2].trim();
-        
-        if (servers[pcTarget]) {
-            servers[pcTarget].pendingTasks.push(contenido);
-            console.log(`? Tarea guardada en ${pcTarget}: ${contenido}`);
-            bot.sendMessage(myChatId, `? Tarea en cola para ${pcTarget.toUpperCase()}`);
-        }
-    } else if (texto.startsWith('/')) {
-        console.log("Comando no reconocido o sin mensaje.");
+    if (texto.toLowerCase().startsWith('pca')) {
+        pcTarget = 'pcA';
+        contenido = texto.replace(/^pca[:\s\/]*/i, '').trim();
+    } else if (texto.toLowerCase().startsWith('pcb')) {
+        pcTarget = 'pcB';
+        contenido = texto.replace(/^pcb[:\s\/]*/i, '').trim();
+    }
+
+    if (pcTarget && contenido) {
+        servers[pcTarget].pendingTasks.push(contenido);
+        console.log(`? ÉXITO: Tarea para ${pcTarget} guardada: ${contenido}`);
+        bot.sendMessage(myChatId, `? Tarea anotada para ${pcTarget.toUpperCase()}`);
+    } else {
+        console.log("Aviso: No se detectó pcA o pcB al inicio, o el mensaje está vacío.");
     }
 });
 
