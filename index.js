@@ -15,19 +15,22 @@ let servers = {
 
 // --- RUTA PARA LAS PCs (HEARTBEAT) ---
 app.get('/heartbeat', (req, res) => {
-    const pc = req.query.id; // Recibe ?id=pcA o ?id=pcB
+    const pc = req.query.id; 
 
     if (servers[pc]) {
+        // --- NUEVA LÓGICA DE PRIMER PULSO ---
+        if (servers[pc].lastSeen === null) {
+            bot.sendMessage(myChatId, `?? **Conexión Inicial**: La **${pc.toUpperCase()}** ha enviado su primer pulso y ya está activa.`, { parse_mode: 'Markdown' });
+        }
+
         servers[pc].lastSeen = new Date();
         servers[pc].alertSent = false;
 
-        // Extraer tareas para esta PC y limpiar su buzón
         const tasksToSend = [...servers[pc].pendingTasks];
         servers[pc].pendingTasks = []; 
 
         console.log(`Pulso de ${pc}. Enviando ${tasksToSend.length} tareas.`);
         
-        // Responder a la PC con la lista de tareas
         res.status(200).json({ 
             status: 'OK', 
             tasks: tasksToSend 
@@ -39,16 +42,12 @@ app.get('/heartbeat', (req, res) => {
 
 // --- LÓGICA DE TELEGRAM ---
 
-// Manejar mensajes de texto para guardar tareas
 bot.on('message', (msg) => {
     const chatIdRecibido = msg.chat.id.toString();
     const texto = msg.text ? msg.text.trim() : "";
 
     if (chatIdRecibido !== myChatId || !texto) return;
 
-    console.log(`--- Procesando: "${texto}" ---`);
-
-    // MÉTODO DIRECTO: ¿El mensaje empieza con pcA o pcB?
     let pcTarget = null;
     let contenido = "";
 
@@ -62,10 +61,7 @@ bot.on('message', (msg) => {
 
     if (pcTarget && contenido) {
         servers[pcTarget].pendingTasks.push(contenido);
-        console.log(`? ÉXITO: Tarea para ${pcTarget} guardada: ${contenido}`);
         bot.sendMessage(myChatId, `? Tarea anotada para ${pcTarget.toUpperCase()}`);
-    } else {
-        console.log("Aviso: No se detectó pcA o pcB al inicio, o el mensaje está vacío.");
     }
 });
 
@@ -73,16 +69,21 @@ bot.on('message', (msg) => {
 bot.onText(/\/status/, (msg) => {
     if (msg.chat.id.toString() !== myChatId) return;
 
-    let respuesta = "?? **Estado de Servidores:**\n\n";
+    const pcsConectadas = Object.values(servers).filter(s => s.lastSeen !== null).length;
+    const totalPcs = Object.keys(servers).length;
+
+    let respuesta = `?? **Estado del Sistema** (${pcsConectadas}/${totalPcs} activas)\n\n`;
+
     for (const [name, data] of Object.entries(servers)) {
         if (!data.lastSeen) {
             respuesta += `? **${name.toUpperCase()}**: Sin registros.\n`;
         } else {
             const diffMin = Math.floor((new Date() - data.lastSeen) / 60000);
-            const status = diffMin < 10 ? "?? ONLINE" : "?? OFFLINE";
+            const status = diffMin < 12 ? "?? ONLINE" : "?? OFFLINE";
             respuesta += `${status} **${name.toUpperCase()}**: hace ${diffMin} min.\n`;
+            
             if (data.pendingTasks.length > 0) {
-                respuesta += `   + ?? ${data.pendingTasks.length} tareas pendientes de bajar.\n`;
+                respuesta += `    + ?? ${data.pendingTasks.length} tareas pendientes.\n`;
             }
         }
     }
